@@ -1,0 +1,72 @@
+import json
+import urllib.request
+import os
+import html
+
+TG_TOKEN = os.environ.get('TG_TOKEN')
+TG_CHAT_ID = os.environ.get('TG_CHAT_ID')
+
+def send_telegram_alert(message):
+
+    url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TG_CHAT_ID,
+        "text": message,
+        "parse_mode": "HTML",
+        "link_preview_options": {
+            "is_disabled": True
+        }
+    }
+    
+    req = urllib.request.Request(
+        url, 
+        data=json.dumps(payload).encode('utf-8'),
+        headers={'Content-Type': 'application/json'}
+    )
+    
+    try:
+        with urllib.request.urlopen(req, timeout=5) as response:
+            print("Message sent to Telegram:", response.read().decode())
+            return True
+    except Exception as e:
+        print(f"Failed to send to Telegram: {str(e)}")
+        return False
+
+
+def lambda_handler(event, context):
+    try:
+        if not event.get("body"):
+            return {"statusCode": 400, "body": "Missing body"}
+            
+        body = json.loads(event["body"])
+        
+        if "workflow_run" not in body:
+            return {"statusCode": 200, "body": "Not a workflow run event"}
+            
+        action = body.get("action") 
+        conclusion = body["workflow_run"].get("conclusion") 
+        
+        if action == "completed" and conclusion == "failure":
+            
+            repo_name = html.escape(body.get("repository", {}).get("full_name", "Unknown"))
+            branch = html.escape(body.get("workflow_run", {}).get("head_branch", "Unknown"))
+            trigger_user = html.escape(body.get("workflow_run", {}).get("triggering_actor", {}).get("login", "Unknown"))
+            run_url = body.get("workflow_run", {}).get("html_url", "#")
+            workflow_name = html.escape(body.get("workflow_run", {}).get("name", "Unknown"))
+            
+            message_text = (
+                f"❌ <b>Build status: Failure.</b>\n\n"
+                f"📦 <b>Репозиторій:</b> {repo_name}\n"
+                f"🌿 <b>Гілка:</b> {branch}\n"
+                f"⚙️ <b>Процес:</b> {workflow_name}\n"
+                f"👤 <b>Автор:</b> {trigger_user}\n\n"
+                f"🔗 <a href='{run_url}'>Link GitHub</a>"
+            )
+            
+            send_telegram_alert(message_text)
+                
+        return {"statusCode": 200, "body": "OK"}
+        
+    except Exception as e:
+        print(f"Error in lambda_handler: {str(e)}")
+        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
