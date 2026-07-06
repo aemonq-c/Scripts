@@ -50,17 +50,15 @@ def lambda_handler(event, context):
             
             repo_name = html.escape(body.get("repository", {}).get("full_name", "Unknown"))
             branch = html.escape(body.get("workflow_run", {}).get("head_branch", "Unknown"))
-            trigger_user = html.escape(body.get("workflow_run", {}).get("triggering_actor", {}).get("login", "Unknown"))
             run_url = body.get("workflow_run", {}).get("html_url", "#")
             workflow_name = html.escape(body.get("workflow_run", {}).get("name", "Unknown"))
             
             message_text = (
                 f"❌ <b>Build status: Failure.</b>\n\n"
-                f"📦 <b>Репозиторій:</b> {repo_name}\n"
-                f"🌿 <b>Гілка:</b> {branch}\n"
-                f"⚙️ <b>Процес:</b> {workflow_name}\n"
-                f"👤 <b>Автор:</b> {trigger_user}\n\n"
-                f"🔗 <a href='{run_url}'>Link GitHub</a>"
+                f"📦 <b>Repository:</b> {repo_name}\n"
+                f"🌿 <b>Branch:</b> {branch}\n"
+                f"⚙️ <b>Process:</b> {workflow_name}\n"
+                f"🔗 <b>Link:</b>\n{run_url}"
             )
             
             send_telegram_alert(message_text)
