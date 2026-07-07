@@ -52,12 +52,14 @@ def lambda_handler(event, context):
             branch = html.escape(body.get("workflow_run", {}).get("head_branch", "Unknown"))
             run_url = body.get("workflow_run", {}).get("html_url", "#")
             workflow_name = html.escape(body.get("workflow_run", {}).get("name", "Unknown"))
-            
+            trigger_user = html.escape(body.get("workflow_run", {}).get("triggering_actor", {}).get("login", "Unknown"))
+
             message_text = (
                 f"❌ <b>Build status: Failure.</b>\n\n"
                 f"📦 <b>Repository:</b> {repo_name}\n"
                 f"🌿 <b>Branch:</b> {branch}\n"
-                f"⚙️ <b>Process:</b> {workflow_name}\n"
+                f"⚙️ <b>Name:</b> {workflow_name}\n"
+                f"👤 <b>Author:</b> {trigger_user}\n\n"
                 f"🔗 <b>Link:</b>\n{run_url}"
             )
             
