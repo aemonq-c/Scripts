@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# ================= НАЛАШТУВАННЯ ІГНОРУВАННЯ =================
+# ================= IGNORE SETTINGS =================
 IGNORE_CONTAINERS="custom-test-container"
-# ============================================================
+# ===================================================
 
 CFG_DIR="/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.d"
 TMP_FILE="/tmp/cw_docker.json"
@@ -14,33 +14,30 @@ log_message() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
 }
 
-log_message "=== Запуск скрипта автоматизації Docker логів ==="
-
 if [ ! -f "$AGENT_CTL" ]; then
-    log_message "ПОМИЛКА: Бінарник агента не знайдено за шляхом $AGENT_CTL. Вихід."
+    log_message "ERROR: CloudWatch Agent binary not found at $AGENT_CTL. Exiting."
     exit 1
 fi
 
 if ! command -v jq &> /dev/null; then
-    log_message "ПОМИЛКА: Утиліту 'jq' не встановлено. Встановіть її."
+    log_message "ERROR: 'jq' utility is not installed. Please install it."
     exit 1
 fi
 
 JSON_ITEMS=$(jq -n '[]')
 found_containers=""
 
-# Опитуємо всі контейнери (-a)
+# Query all containers including stopped ones (-a)
 for id in $(docker ps -a -q); do
     name=$(docker inspect --format '{{.Name}}' "$id" | sed 's/\///')
     log=$(docker inspect --format '{{.LogPath}}' "$id")
     
-    # Якщо шлях до логу пустий (наприклад, інший лог-драйвер), пропускаємо
+    # If the log path is empty, skip silently
     if [ -z "$log" ] || [ "$log" = "<no value>" ]; then
-        log_message "Попередження: Контейнер $name не має шляху до лог-файлу (можливо, не json-file драйвер)."
         continue
     fi
 
-    # Перевіряємо список ігнорування
+    # Check the ignore list
     should_ignore=false
     for skip in $IGNORE_CONTAINERS; do
         if [ "$name" = "$skip" ]; then
@@ -50,11 +47,9 @@ for id in $(docker ps -a -q); do
     done
     
     if [ "$should_ignore" = true ]; then
-        log_message "Інфо: Контейнер $name пропущено (в списку ігнорування)."
         continue
     fi
     
-    # Формуємо об'єкт БЕЗ перевірки [ -f "$log" ], довіряючи Docker та CloudWatch Agent
     ITEM=$(jq -n \
         --arg file "$log" \
         --arg stream "{instance_id}/$name" \
@@ -64,28 +59,33 @@ for id in $(docker ps -a -q); do
     found_containers="$found_containers $name"
 done
 
-jq -n --argjson list "$JSON_ITEMS" '{"logs":{"logs_collected":{"files":{"collect_list": $list}}}}' > "$TMP_FILE"
+# Sort the JSON array by file_path to prevent false positives caused by docker ps ordering
+jq -n --argjson list "$JSON_ITEMS" '{"logs":{"logs_collected":{"files":{"collect_list": ($list | sort_by(.file_path))}}}}' > "$TMP_FILE"
 
-if [ "$found_containers" = "" ]; then
-    log_message "Iнфо: Жодного активного контейнера для збору логів не знайдено."
-else
-    log_message "Знайдено контейнери для відправки в AWS:$found_containers"
-fi
-
+# CHECK FOR CHANGES
 if ! cmp -s "$TMP_FILE" "$FINAL_FILE"; then
-    log_message "Зміни виявлено! Оновлюємо конфігурацію CloudWatch Agent..."
+    # Log execution only if actual configuration changes are detected
+    log_message "=== Changes detected! Starting CloudWatch configuration update ==="
+    
+    if [ "$found_containers" = "" ]; then
+        log_message "INFO: No active containers found for log collection."
+    else
+        log_message "Found containers for AWS export:$found_containers"
+    fi
+
+    log_message "Updating CloudWatch Agent configuration..."
     mv "$TMP_FILE" "$FINAL_FILE"
     
     CMD_OUT=$("$AGENT_CTL" -a append-config -m ec2 -s -c file:"$FINAL_FILE" 2>&1)
     if [ $? -eq 0 ]; then
-        log_message "УСПІХ: Нову конфігурацію Docker успішно додано до CloudWatch Agent."
+        log_message "SUCCESS: New Docker configuration added to CloudWatch Agent."
     else
-        log_message "ПОМИЛКА при виконанні append-config: $CMD_OUT"
+        log_message "ERROR during append-config execution: $CMD_OUT"
     fi
+    
+    log_message "=== Change processing completed ==="
+    echo "" >> "$LOG_FILE"
 else
-    log_message "Змін немає. Поточна конфігурація актуальна."
+    # If no changes are found, silently remove the temporary file without writing to the log
     rm -f "$TMP_FILE"
 fi
-
-log_message "=== Роботу скрипта завершено ==="
-echo "" >> "$LOG_FILE"
