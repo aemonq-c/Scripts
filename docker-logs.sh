@@ -77,7 +77,7 @@ if ! cmp -s "$TMP_FILE" "$FINAL_FILE"; then
     log_message "Updating CloudWatch Agent configuration..."
     mv "$TMP_FILE" "$FINAL_FILE"
     
-    CMD_OUT=$("$AGENT_CTL" -a append-config -m ec2 -s -c file:"$FINAL_FILE" 2>&1)
+    CMD_OUT=$("$AGENT_CTL" -a append-config -m ec2 -c file:"$FINAL_FILE" 2>&1)
     if [ $? -eq 0 ]; then
         log_message "SUCCESS: New Docker configuration added to CloudWatch Agent."
     else
