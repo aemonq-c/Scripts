@@ -50,10 +50,11 @@ for id in $(docker ps -a -q); do
         continue
     fi
     
-    ITEM=$(jq -n \
+	ITEM=$(jq -n \
         --arg file "$log" \
         --arg stream "{instance_id}/$name" \
-        '{file_path: $file, log_group_name: "/aws/ec2/docker-containers", log_stream_name: $stream, retention_in_days: 30}')
+        '{file_path: $file, log_group_name: "/aws/ec2/docker-containers", log_stream_name: $stream, retention_in_days: 30, from_beginning: true}')
+
     
     JSON_ITEMS=$(echo "$JSON_ITEMS" | jq --argjson item "$ITEM" '. += [$item]')
     found_containers="$found_containers $name"
