@@ -53,7 +53,7 @@ for id in $(docker ps -a -q); do
 	ITEM=$(jq -n \
         --arg file "$log" \
         --arg stream "{instance_id}/$name" \
-        '{file_path: $file, log_group_name: "/aws/ec2/docker-containers", log_stream_name: $stream, retention_in_days: 30, from_beginning: true}')
+        '{file_path: $file, log_group_name: "/aws/ec2/docker-containers", log_stream_name: $stream, retention_in_days: 30}')
 
     
     JSON_ITEMS=$(echo "$JSON_ITEMS" | jq --argjson item "$ITEM" '. += [$item]')
